@@ -1,0 +1,90 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%        Master's Thesis
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%      Author: Ben Lickly
+%     Created: Mon Jun 29 05:00 PM 2009 P
+% Last Change: Mon Jun 29 05:00 PM 2009 P
+%
+\newcommand{\ttitle}{C Timing Constructs for the PRET architecture}
+\newcommand{\tauthor}{Ben Lickly}
+\newcommand{\setjmp}{setjmp}
+\newcommand{\longjmp}{longjmp}
+
+\documentclass[12pt]{article}
+\usepackage{listings}
+\usepackage[usenames,dvipsnames]{color}
+\lstdefinelanguage[PRET]{C}[ANSI]{C}{
+morekeywords=[2]{tryin,timedloop,catch}
+}
+\lstset{language=[PRET]C
+,basicstyle=\small
+,keywordstyle=\color{blue}\bfseries
+,stringstyle=\color{OliveGreen}
+,commentstyle=\color{red}
+,frame=single
+,tabsize=2
+}
+\input{department_template}
+\section{Introduction}
+
+We have come a long way %<-- eww
+since Dijkstra's famous indictment of GOTO statement.
+Now, the benefits structured programming are unabashedly clear:
+programmers are able to think at higher levels of abstraction and more quickly
+understand common idioms.
+
+In much the same way, timing specifications of embedded system are often
+strewn in an unstructured way throughout the program, as a mix of clocks, timers, and priorities.  We posit that a simple abstraction to structure this aspect of the program would lead to similar gains in understandability and analyzability.
+
+\section{Related Work}
+There exist many existing works that aim to augment C with timed semantics.
+
+Insup Lee presents an approach refered to as timing scopes, in which he augments
+C with special block and loop statments to specify the timing of fragments of C code.  This work uses his work as a starting point, trying to address some of the shortcomings.
+
+
+\section{Timing constructs}
+
+Work here consists of two new types of timing constructs:
+one that encloses a single straight-line block of code,
+and one that encloses a loop.
+Each of them is able, but not required, to specify two timing constraints.
+The first we call the \emph{lower bound} timing constraint and the second
+we call the \emph{maximum execution time}.
+%Each of them is able to specify the lower bound for the block of code or the maximum execution time, or both.
+
+For a straight-line block of code, this is relatively straightforward:
+If the block of code does not finish within the maximum execution time, an exception will be raised.
+If the block of code finished in less than the lower bound (even including the exception code, if applicable), then the program waits until the lower bound has elapsed before continuing.
+%
+For the loop construct, the semantics of the lower bound specification and the maximum execution time specification have the same effect, but interesting consequences.
+The lower bound now specifies the minimum period of the loop, and the maximum execution time gives a bound on how long a single iteration may take.
+If the maximum execution time plus the worst-case execution time of the exception handler is less than the lower bound, then we know that the period of the loop will be exactly the lower bound.
+
+\subsection{Examples}
+The following section presents a couple of examples that give a flavor for how the lower bound and maximum execution time specifications work.
+
+\subsubsection{tryin}
+In the first example, we show a process that cooks scrambled eggs.
+It takes advantage of the exception mechanism to stop beating the eggs
+after 30 seconds rather than after a fixed number of beatings.
+Since the egg beating is in an infinite loop, the tryin block will always ``run out of time'' and jump to the exception handler.
+After putting the eggs in the pan and finishing the timing construct, the code will wait until 5 minutes have elapsed before continuing on to the statement after the timing construct and removing the cooked eggs from the pan.
+\lstinputlisting{tryin_example.c}
+
+In order to implement the exception handling, \setjmp/\longjmp are used, with
+the call to \setjmp handled explicitly in the code and the call to \longjmp
+handled in the handler for the DEADLOADBRANCH statement. The lower bound
+specification encloses the maximum execution time specification to ensure
+that it is enforced even when the maximum execution time is violated.
+The translated code for this example is as follows:
+\lstinputlisting{tryin_example.rewritten.c}
+
+\subsubsection{timedloop}
+In the second example, we show how the timedloop statement can be used to schedule a periodic task that has a deadline, such as a UNIX-style cron job that must finish within a certain time bound.  It is important to note that throwing an exception does not cause the loop to exit.  This would need to be done explicitly in the exception handler.
+\lstinputlisting{timedloop_example.c}
+
+The translation for the timedloop construct is slightly more complicated than that of the tryin construct.  Due to efficiency concerns, the setjmp statement is moved outside the loop, so as to minimize the effect on a critical path in the loop.  Because of this, additional control flow statements must be added to ensure that the loop is resumed after an exception is thrown.
+\lstinputlisting{timedloop_example.rewritten.c}
+
+\end{document}

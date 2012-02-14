@@ -1,0 +1,94 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%        New Deadline Statement Semantics
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%      Author: Ben Lickly
+%
+
+\documentclass[12pt]{article}
+\usepackage{listings}
+\usepackage[usenames,dvipsnames]{color}
+\begin{document}
+
+\section{Introduction/Motivation}
+This report is motivated by a desire to create C-level constructs
+that compile down to deadline statements. One undesirable aspect of
+that conversion is the limited number of deadline registers. This,
+combined with the fact that we cannot achieve register spilling with
+deadline registers, means that there is a limitation on the amount of
+timing constructs that can be concurrently active in a program.
+This would make timing constructs not compositional, in the sense
+that two functions with timing constructs may be compilable and correct
+individually, but composing them results in a program that cannot be compiled.
+Clearly, this is undesirable.
+
+\section{Main Idea}
+The main idea is to use a single hardware timer register, and general purpose
+registers in place of the individual deadline registers.
+\begin{lstlisting}
+	dead T, r2
+	dead T, imm
+\end{lstlisting}
+becomes
+\begin{lstlisting}
+	dead r1, r2
+	dead r1, imm
+\end{lstlisting}
+The semantics of the new deadline instruction is as follows:
+First read the value of $r1$, and compare it to the current value of the hardware timer.  If the current timer value is before the value of $r1$, simply stall
+until current timer value advances.  Once the current timer value reaches $r1$,
+load the current timer value plus the value of $r2$ or $imm$ into $r1$.
+
+\section{Caveats}
+
+\subsection{deadbranch statements}
+One of the problems with this approach is that it does not apply easily
+to deadline statements that perform an action when their registers reach zero,
+such as the deadbranch statement. One proposed solution would be to have
+a single extra register that raises an interrupt handler when its deadline
+is reached.  Deadbranch deadlines could then be implemented with software
+keeping track of the next deadline with a priority queue and only having
+the hardware wait on a single timer.
+This additional software would add overhead when using deadbranch statements
+and would also place a lower limit on how quickly two separate deadbranch
+misses could be noticed, but would add the significant benefit of not
+limiting the number of deadbranch statements that could be in flight at
+a given time.
+
+\subsection{Timer rollover}
+One of the greatest benefits of having separate timing registers for each
+timing block, is that each register is completely self-contained, and
+refers exactly to the block that it is timing.
+We can, for example, stop registers for counting when they get to zero,
+which is impossible with a single global timing register.
+The greatest difficulty that comes with having all deadline blocks synchronize
+to a global timer is that of rollover. i.e. How can we assure that the change
+of the global timer's most significant bit from 1 to 0 doesn't make deadlines
+think that they have been missed?
+
+One way to do this is to compare differences in time values rather than
+the time values themselves.
+For example, rather than checking for $t_1$ being earlier than $t_2$ by simply seeing if $t_1 < t_2$, we can check if $t_1 - t_2 < 0$.
+In order for this comparison to be true, the values must of course be unsigned.
+Notice that this results in sacrificing half of the range of the timers
+in order to record which direction a time is.
+This is because the new comparison operation only works when the difference
+in timer values is within the range of an unsigned value,
+whereas the simple comparison operation worked for any two timer values,
+no matter how far apart they are from each other.
+
+Small example:
+Let us consider a small example with an 8-bit timer that wraps around.
+% [-128,127]
+Assume that we set a timer at time 100 to last for 50 time units.
+In both cases, the deadline will be -106 (= 100 + 50 - 256).
+Now let us assume that 25 time units later, at time 125, the next deadline is
+hit. In order to know whether we should stall or not,
+we need to know whether the time 125 is before time -106.
+By the simplest check, we will say that 125 is after -106,
+since $-106 < 125$.
+By the difference check, however, we will check if time 125 is before -106
+by checking if $125 - -106 < 0$.
+This results in the check of $-25 < 0$ which is true.
+
+
+\end{document}
