@@ -3,7 +3,7 @@ C_SOURCES=tryin_example.c timedloop_example.c
 TEX_SOURCE=$(OUTPUT:pdf=tex)
 REWRITTEN=$(C_SOURCES:.c=.rewritten.c)
 LLVMDIR=llvm-clang
-CLANGCC=$(LLVMDIR)/Debug/bin/clang-cc
+CLANGCC=$(LLVMDIR)/build/Debug/bin/clang-cc
 
 all: $(OUTPUT)
 
@@ -16,7 +16,7 @@ $(OUTPUT): $(TEX_SOURCE) $(C_SOURCES) $(REWRITTEN)
 	astyle $@
 
 $(CLANGCC): $(LLVMDIR)
-	cd $(LLVMDIR) && ./configure && $(MAKE)
+	cd $(LLVMDIR) && mkdir -p build && cd build && ../configure && $(MAKE)
 
 $(LLVMDIR):
 	git clone https://github.com/blickly/llvm-clang -b insupleestyle $(LLVMDIR)
